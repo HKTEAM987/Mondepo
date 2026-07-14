@@ -278,12 +278,19 @@
                                        ${e.email ? '<strong>Email</strong>: '+e.email+'<br>' : ''}`;
                             break;
                         case 'gallery':
-                            icon='🖼️';
-                            content = `<strong>Fichier</strong>: ${e.name||e.path||e.file||'?'}<br>
-                                       <strong>Taille</strong>: ${e.size ? (e.size/1024).toFixed(1)+' KB' : '?'}<br>
-                                       ${e.data ? `<img src="${e.data}" class="ex" alt="photo">` : ''}
-                                       ${e.url ? `<a href="${e.url}" target="_blank">[Lien]</a>` : ''}`;
-                            break;
+    icon='🖼️';
+    let img='';
+    if(e.data&&typeof e.data=='string'){
+        let b=e.data;
+        if(b.startsWith('data:')) b=b.replace(/^data:\s*/,'');
+        if(b.length>50){
+            let ext=b.startsWith('9j/')?'jpeg':'png';
+            img='<img src="data:image/'+ext+';base64,'+b+'" class="ex" onerror=this.style.display="none">';
+            if(b.length>500000) img='<details><summary>🖼️ '+(b.length/1024/1024).toFixed(1)+' MB</summary>'+img+'</details>';
+        }
+    }
+    content='<strong>Fichier</strong>: '+(e.name||'?')+'<br>'+img+(e.url?' <a href="'+e.url+'" target="_blank">[Lien]</a>':'');
+    break;
                         default:
                             icon='📄';
                             content = `<pre>${JSON.stringify(e, null, 2).substring(0,400)}</pre>`;
